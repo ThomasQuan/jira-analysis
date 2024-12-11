@@ -4,9 +4,9 @@ import argparse
 import os
 from dotenv import load_dotenv
 from src.scraper.requester import JiraRequester
-from src.scraper.init_custom_fields import init_custom_fields
 from halo import Halo
 from src.scraper.printer import JiraPrinter
+from src.analyzer.converter import convert_issue_to_csv
 
 
 def main():
@@ -19,9 +19,6 @@ def main():
     # Command: project-details
     subparsers.add_parser("project-details", help="Show project details")
 
-    # Command: init-custom-fields
-    subparsers.add_parser("init-custom-fields", help="Initialize custom fields")
-
     # Command: issues
     issues_parser = subparsers.add_parser("issues", help="Fetch project issues")
     issues_parser.add_argument(
@@ -31,10 +28,10 @@ def main():
         help="Filter by assignee(s). Examples:\n" "john.doe jane.smith",
     )
     issues_parser.add_argument(
-        "--updated",
+        "--created",
         type=str,
         nargs="+",
-        help="Filter by last update date. Examples:\n"
+        help="Filter by created date. Examples:\n"
         "today, yesterday, week, month, year,\n"
         "2024-01-01 (specific date),\n"
         "2024-01-01 2024-01-31 (date range),\n"
@@ -66,6 +63,10 @@ def main():
 
     # Command: check issues keys
     subparsers.add_parser("check-issues-keys", help="Check issues keys")
+
+    # Command: convert issues to csv
+    convert_parser = subparsers.add_parser("issues-to-csv", help="Convert issues to csv")
+    convert_parser.add_argument("--year", type=str, help="Year to convert")
 
     args = parser.parse_args()
 
@@ -107,19 +108,15 @@ def main():
             spinner.succeed("Project details fetched successfully")
         printer.print_project_details(project_details)
 
-    elif args.command == "init-custom-fields":
-        custom_fields = init_custom_fields(BASE_URL, USERNAME, API_TOKEN)
-        printer.print_custom_fields_init(custom_fields)
-
     elif args.command == "issues":
         timeframe = {}
-        if args.updated:
-            timeframe["updated"] = (
-                args.updated[0] if len(args.updated) == 1 else args.updated
+        if args.created:
+            timeframe["created"] = (
+                args.created[0] if len(args.created) == 1 else args.created
             )
 
         if not timeframe:
-            timeframe = {"updated": "today"}  # Default behavior
+            timeframe = {"created": "today"}  # Default behavior
 
         with Halo(text="Fetching issues...", spinner="dots") as spinner:
             issues, total_available = jiraRequester.get_project_issues(
@@ -136,15 +133,18 @@ def main():
         assignee = args.assignee if args.assignee else USERNAME
         with Halo(text="Fetching issues...", spinner="dots") as spinner:
             issues, total_available = jiraRequester.get_project_issues(
-                PROJECT_KEY, {"updated": timeframe}, [assignee]
+                PROJECT_KEY, {"updated": timeframe}, [assignee], skip_cache=True
             )
             spinner.succeed(f"Successfully fetched {len(issues)} issues")
 
-        custom_fields = jiraRequester.load_custom_field_mappings()
-        printer.print_eod(issues, total_available, timeframe, custom_fields)
+        printer.print_eod(issues)
 
     elif args.command == "check-issues-keys":
         jiraRequester.check_issues_keys(PROJECT_KEY)
+
+    elif args.command == "issues-to-csv":
+        custom_fields = jiraRequester.load_custom_field_mappings()
+        convert_issue_to_csv(PROJECT_KEY, args.year, custom_fields)
 
 
 if __name__ == "__main__":

@@ -40,8 +40,49 @@ class JiraPrinter:
         summary_text.append("=" * 50, style="bold green")
         rprint(summary_text)
 
-    def print_eod(self, issues, total_available, timeframe, custom_fields):
-        self.print_issues(issues, total_available, timeframe, custom_fields)
+    def print_eod(self, issues):
+        for issue in issues:
+            fields = issue["fields"]
+
+            # Get status changes count
+            changelog = issue.get("changelog", {}).get("histories", [])
+            todo_count = sum(
+                1
+                for history in changelog
+                for item in history.get("items", [])
+                if item.get("field") == "status" and item.get("toString") == "To Do"
+            )
+
+            # Get current status
+            current_status = fields.get("status", {}).get("name", "Unknown")
+
+            # Get latest comment
+            comments = fields.get("comment", {}).get("comments", [])
+            latest_comment = "No comments"
+            if comments:
+                latest = comments[-1]
+                author = latest.get("author", {}).get("displayName")
+                comment_body = self._format_comment_body(latest.get("body"))
+                latest_comment = (
+                    f"{author}: {comment_body[:100]}..."  # Truncate long comments
+                )
+
+            # Get custom fields
+            
+
+            # Get fix versions
+            fix_versions = [v.get("name", "") for v in fields.get("fixVersions", [])]
+
+            # Print concise report
+            print("\n" + "=" * 80)
+            print(f"Issue: {issue.get('key')} - {fields.get('summary')}")
+            print(f"Current Status: {current_status}")
+            print(f"Times in To Do: {todo_count}")
+            print(
+                f"Fix Versions: {', '.join(fix_versions) if fix_versions else 'None'}"
+            )
+            print(f"Latest Comment: {latest_comment}")
+            print("=" * 80)
 
     # Private helper methods
     def _print_single_issue(self, issue, custom_fields):
@@ -98,9 +139,11 @@ class JiraPrinter:
                         )
 
     def _print_custom_fields(self, fields, custom_fields):
-        print("=" * 20, "Custom Fields", "=" * 20)
         for field_key, field_value in fields.items():
-            if field_key.startswith("customfield_") and field_key in custom_fields:
+            if (
+                field_key.startswith("customfield_")
+                and field_key in custom_fields
+            ):
                 if field_value is not None and field_value != []:
                     field_info = custom_fields[field_key]
                     field_name = field_info.get("name", field_key)
@@ -110,7 +153,6 @@ class JiraPrinter:
                         field_value, field_name, field_type
                     )
                     print(f"{field_name}: {formatted_value}")
-        print("=" * 20, "Custom Fields", "=" * 20)
 
     def _format_custom_field(self, field_value, field_name, field_type):
         if field_name == "Sprint":

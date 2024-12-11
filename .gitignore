@@ -9,3 +9,4 @@ dist/
 config/
 raw_data/
 **/__pycache__/
+csv_data/

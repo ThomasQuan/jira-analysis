@@ -7,6 +7,8 @@ setup(
         "python-dotenv",
         "requests",
         "halo",
-        "rich"
+        "rich",
+        "streamlit",
+        "pandas",
     ]
 ) 

@@ -4,7 +4,7 @@ from typing import Dict, List, Any
 from datetime import datetime, timedelta
 import csv
 from pathlib import Path
-import time
+import os
 
 
 class JiraRequester:
@@ -22,6 +22,36 @@ class JiraRequester:
             "Accept": "application/json",
             "Content-Type": "application/json",
         }
+
+    def init_custom_fields(self) -> Dict[str, Any]:
+        """
+        Get all custom fields configured in Jira and store them in config/jira_custom_fields.json
+        """
+        url = f"{self.base_url}/rest/api/3/field"
+        auth = self.auth
+        headers = self.headers
+
+        response = requests.get(url, auth=auth, headers=headers)
+        response.raise_for_status()
+
+        # Filter for custom fields only and format the output
+        custom_fields = {}
+        for field in response.json():
+            if field.get("custom", False):
+                custom_fields[field["id"]] = {
+                    "name": field.get("name"),
+                    "description": field.get("description"),
+                    "type": field.get("schema", {}).get("type"),
+                }
+
+        # Create config directory if it doesn't exist
+        os.makedirs("config", exist_ok=True)
+
+        # Write custom fields to JSON file
+        with open("config/jira_custom_fields.json", "w") as f:
+            json.dump(custom_fields, f, indent=2)
+
+        return custom_fields
 
     def get_project_details(self, project_key: str) -> Dict[str, Any]:
         """
@@ -152,15 +182,26 @@ class JiraRequester:
         project_key: str,
         timeframe: Dict[str, Any] = None,
         assignees: List[str] = None,
+        skip_cache: bool = False,
     ) -> tuple[List[Dict[str, Any]], int]:
         """
         Fetch all issues for a project with detailed information, using cache when available
+
+        :param project_key: Jira project key
+        :param timeframe: Dictionary specifying date range for issues
+        :param assignees: List of assignees to filter issues
+        :param skip_cache: If True, bypass cache and fetch fresh data
+        :return: Tuple of (issues list, total number of issues)
         """
         output_dir = Path("raw_data") / f"{project_key}_issues"
         cached_issues = {}
         dates_to_fetch = set()
 
-        # Determine which dates need to be fetched
+        ## Initialize custom fields if not already initialized
+        if not os.path.exists("config/jira_custom_fields.json"):
+            self.init_custom_fields()
+
+        # Determine date range
         for field, value in timeframe.items():
             start_date, end_date = self.get_date_range(value)
             if start_date and end_date:
@@ -171,66 +212,54 @@ class JiraRequester:
                     dates_to_fetch.add(current_date.strftime("%Y-%m-%d"))
                     current_date += timedelta(days=1)
 
-        # Add timer for JSON loading
-        start_time = time.time()
+        # If not skipping cache, attempt to load cached data
+        if not skip_cache:
+            if output_dir.exists():
+                for date_str in list(
+                    dates_to_fetch
+                ):  # Create a copy to modify during iteration
+                    date = datetime.strptime(date_str, "%Y-%m-%d")
+                    year_dir = output_dir / str(date.year)
+                    month_name = {
+                        1: "january",
+                        2: "february",
+                        3: "march",
+                        4: "april",
+                        5: "may",
+                        6: "june",
+                        7: "july",
+                        8: "august",
+                        9: "september",
+                        10: "october",
+                        11: "november",
+                        12: "december",
+                    }[date.month]
 
-        # Load only the relevant cached issues from year/month structure
-        if output_dir.exists():
-            dates_found = set()  # Track which dates we've found in cache
-            for date_str in dates_to_fetch:
-                date = datetime.strptime(date_str, "%Y-%m-%d")
-                year_dir = output_dir / str(date.year)
-                month_name = {
-                    1: "january",
-                    2: "february",
-                    3: "march",
-                    4: "april",
-                    5: "may",
-                    6: "june",
-                    7: "july",
-                    8: "august",
-                    9: "september",
-                    10: "october",
-                    11: "november",
-                    12: "december",
-                }[date.month]
+                    json_path = year_dir / month_name / "issues.json"
+                    if json_path.exists():
+                        with open(json_path, "r", encoding="utf-8") as f:
+                            month_data = json.load(f)
+                            if date_str in month_data:
+                                cached_issues[date_str] = month_data[date_str]
+                                dates_to_fetch.remove(date_str)
 
-                json_path = year_dir / month_name / "issues.json"
-                if json_path.exists():
-                    with open(json_path, "r", encoding="utf-8") as f:
-                        month_data = json.load(f)
-                        if date_str in month_data:
-                            cached_issues[date_str] = month_data[date_str]
-                            dates_found.add(date_str)
+            # If all dates are in cache, return cached data
+            if not dates_to_fetch:
+                all_issues = []
+                for field, value in timeframe.items():
+                    start_date, end_date = self.get_date_range(value)
+                    if start_date and end_date:
+                        current_date = datetime.strptime(start_date, "%Y-%m-%d")
+                        end_datetime = datetime.strptime(end_date, "%Y-%m-%d")
 
-            # Remove found dates from dates_to_fetch after iteration is complete
-            dates_to_fetch -= dates_found
+                        while current_date < end_datetime:
+                            date_str = current_date.strftime("%Y-%m-%d")
+                            if date_str in cached_issues:
+                                all_issues.extend(cached_issues[date_str])
+                            current_date += timedelta(days=1)
+                return all_issues, len(all_issues)
 
-        json_load_time = time.time() - start_time
-        print(f"Loading JSON cache took: {json_load_time:.2f} seconds")
-
-        issues_url = f"{self.base_url}/rest/api/3/search"
-        all_issues = []
-
-        # If all dates are cached, return cached data
-        if not dates_to_fetch:
-            print("All requested dates found in cache")
-            all_issues = []
-            # Only include issues from the requested timeframe
-            for field, value in timeframe.items():
-                start_date, end_date = self.get_date_range(value)
-                if start_date and end_date:
-                    current_date = datetime.strptime(start_date, "%Y-%m-%d")
-                    end_datetime = datetime.strptime(end_date, "%Y-%m-%d")
-
-                    while current_date < end_datetime:
-                        date_str = current_date.strftime("%Y-%m-%d")
-                        if date_str in cached_issues:
-                            all_issues.extend(cached_issues[date_str])
-                        current_date += timedelta(days=1)
-            return all_issues, len(all_issues)
-
-        # Build JQL query for missing dates
+        # Build JQL query for fetching issues
         jql = f"project = {project_key}"
 
         for field, value in timeframe.items():
@@ -249,12 +278,16 @@ class JiraRequester:
             assignee_list = ", ".join(quoted_assignees)
             jql += f" AND assignee IN ({assignee_list})"
 
-        jql += " ORDER BY updated DESC"
+        jql += f" ORDER BY {field} DESC"
+
+        print(f"\nExecuting JQL: {jql}")
 
         # Fetch new issues
+        all_issues = []
+        new_issues_by_date = {}
+        issues_url = f"{self.base_url}/rest/api/3/search"
         batch_size = 100
         start_at = 0
-        new_issues_by_date = {}
 
         try:
             while True:
@@ -266,86 +299,34 @@ class JiraRequester:
                     "expand": ["changelog"],
                 }
 
-                print(f"Fetching new issues starting at: {start_at}")
                 response = requests.post(
                     issues_url, json=payload, auth=self.auth, headers=self.headers
                 )
 
-                if not response.ok:
-                    print(f"Error response: {response.text}")
-                    response.raise_for_status()
-
+                response.raise_for_status()
                 result = response.json()
                 batch_issues = result.get("issues", [])
 
                 if not batch_issues:
                     break
 
-                # Organize new issues by date using updated field
+                # Organize new issues by date
                 for issue in batch_issues:
-                    updated_str = issue.get("fields", {}).get("updated", "")
-                    if updated_str:
-                        date = updated_str.split("T")[0]
+                    time_str = issue.get("fields", {}).get(field, "")
+                    if time_str:
+                        date = time_str.split("T")[0]
                         if date not in new_issues_by_date:
                             new_issues_by_date[date] = []
                         new_issues_by_date[date].append(issue)
+                        all_issues.append(issue)
 
                 start_at += len(batch_issues)
                 if len(batch_issues) < batch_size:
                     break
 
-            # Update the cache saving logic
-            if new_issues_by_date:
-                # Group new issues by year and month
-                issues_by_year_month = {}
-                for date_str, issues in new_issues_by_date.items():
-                    date = datetime.strptime(date_str, "%Y-%m-%d")
-                    year = str(date.year)
-                    month = date.month
-
-                    if year not in issues_by_year_month:
-                        issues_by_year_month[year] = {}
-                    if month not in issues_by_year_month[year]:
-                        issues_by_year_month[year][month] = {}
-
-                    issues_by_year_month[year][month][date_str] = issues
-
-                # Month mapping for folder names
-                month_names = {
-                    1: "january",
-                    2: "february",
-                    3: "march",
-                    4: "april",
-                    5: "may",
-                    6: "june",
-                    7: "july",
-                    8: "august",
-                    9: "september",
-                    10: "october",
-                    11: "november",
-                    12: "december",
-                }
-
-                # Save issues in year/month structure
-                for year, year_data in issues_by_year_month.items():
-                    for month_num, month_data in year_data.items():
-                        month_name = month_names[month_num]
-                        month_dir = output_dir / year / month_name
-                        month_dir.mkdir(parents=True, exist_ok=True)
-
-                        # Merge with existing month data if it exists
-                        json_path = month_dir / "issues.json"
-                        existing_month_data = {}
-                        if json_path.exists():
-                            with open(json_path, "r", encoding="utf-8") as f:
-                                existing_month_data = json.load(f)
-
-                        # Update with new data
-                        existing_month_data.update(month_data)
-
-                        # Save updated month data
-                        with open(json_path, "w", encoding="utf-8") as f:
-                            json.dump(existing_month_data, f, indent=2)
+            # Save new issues to cache if not skipping cache
+            if not skip_cache and new_issues_by_date:
+                self._save_issues_to_cache(output_dir, new_issues_by_date)
 
         except requests.exceptions.RequestException as e:
             print(f"Error making request: {str(e)}")
@@ -354,6 +335,61 @@ class JiraRequester:
             raise
 
         return all_issues, len(all_issues)
+
+    def _save_issues_to_cache(self, output_dir, new_issues_by_date):
+        """
+        Helper method to save issues to cache in a year/month structure
+        """
+        # Group new issues by year and month
+        issues_by_year_month = {}
+        for date_str, issues in new_issues_by_date.items():
+            date = datetime.strptime(date_str, "%Y-%m-%d")
+            year = str(date.year)
+            month = date.month
+
+            if year not in issues_by_year_month:
+                issues_by_year_month[year] = {}
+            if month not in issues_by_year_month[year]:
+                issues_by_year_month[year][month] = {}
+
+            issues_by_year_month[year][month][date_str] = issues
+
+        # Month mapping for folder names
+        month_names = {
+            1: "january",
+            2: "february",
+            3: "march",
+            4: "april",
+            5: "may",
+            6: "june",
+            7: "july",
+            8: "august",
+            9: "september",
+            10: "october",
+            11: "november",
+            12: "december",
+        }
+
+        # Save issues in year/month structure
+        for year, year_data in issues_by_year_month.items():
+            for month_num, month_data in year_data.items():
+                month_name = month_names[month_num]
+                month_dir = output_dir / year / month_name
+                month_dir.mkdir(parents=True, exist_ok=True)
+
+                # Merge with existing month data if it exists
+                json_path = month_dir / "issues.json"
+                existing_month_data = {}
+                if json_path.exists():
+                    with open(json_path, "r", encoding="utf-8") as f:
+                        existing_month_data = json.load(f)
+
+                # Update with new data
+                existing_month_data.update(month_data)
+
+                # Save created month data
+                with open(json_path, "w", encoding="utf-8") as f:
+                    json.dump(existing_month_data, f, indent=2)
 
     def get_board_configuration(self, project_key: str) -> Dict[str, Any]:
         """
