@@ -10,5 +10,8 @@ setup(
         "rich",
         "streamlit",
         "pandas",
+        "plotly",
+        "calplot",
+        "numpy",
     ]
-) 
+)

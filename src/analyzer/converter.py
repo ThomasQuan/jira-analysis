@@ -104,7 +104,7 @@ def convert_issue_to_csv(project_key, year, custom_fields):
                     "Fix Version": ", ".join(
                         v.get("name", "") for v in fields.get("fixVersions", [])
                     ),
-                    "Parent Ticket": fields.get("parent", {}).get("key"),
+                    "Parent Ticket": get_parent_ticket(fields),
                     "Comments History": json.dumps(_extract_comments(fields)),
                     "Status Change History": json.dumps(_extract_status_history(issue)),
                 }
@@ -115,6 +115,14 @@ def convert_issue_to_csv(project_key, year, custom_fields):
                 writer.writerow(row)
 
     return csv_file
+
+
+def get_parent_ticket(fields):
+    parts = [
+        fields.get("parent", {}).get("key"),
+        fields.get("parent", {}).get("fields", {}).get("summary")
+    ]
+    return " - ".join(filter(None, parts))
 
 
 def get_custom_fields(fields, custom_fields):
