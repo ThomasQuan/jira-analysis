@@ -38,7 +38,7 @@ def main():
         "all (all issues)",
     )
     issues_parser.add_argument("--silent", action="store_true", help="Silent mode")
-
+    issues_parser.add_argument("--skip-cache", action="store_true", help="Skip cache")
     # Command: eod
     eod_parser = subparsers.add_parser(
         "eod",
@@ -61,11 +61,10 @@ def main():
         "--assignee", type=str, nargs="+", help="Filter by assignee(s)"
     )
 
-    # Command: check issues keys
-    subparsers.add_parser("check-issues-keys", help="Check issues keys")
-
     # Command: convert issues to csv
-    convert_parser = subparsers.add_parser("issues-to-csv", help="Convert issues to csv")
+    convert_parser = subparsers.add_parser(
+        "issues-to-csv", help="Convert issues to csv"
+    )
     convert_parser.add_argument("--year", type=str, help="Year to convert")
 
     args = parser.parse_args()
@@ -120,13 +119,18 @@ def main():
 
         with Halo(text="Fetching issues...", spinner="dots") as spinner:
             issues, total_available = jiraRequester.get_project_issues(
-                PROJECT_KEY, timeframe, args.assignee
+                PROJECT_KEY, timeframe, args.assignee, skip_cache=args.skip_cache
             )
             spinner.succeed(f"Successfully fetched {len(issues)} issues")
 
         if not args.silent:
             custom_fields = jiraRequester.load_custom_field_mappings()
-            printer.print_issues(issues, total_available, timeframe, custom_fields)
+            printer.print_issues(
+                issues,
+                total_available,
+                timeframe,
+                custom_fields,
+            )
     elif args.command == "eod":
         timeframe = args.timeframe if args.timeframe else ["yesterday"]
         timeframe = timeframe[0] if len(timeframe) == 1 else timeframe
@@ -138,9 +142,6 @@ def main():
             spinner.succeed(f"Successfully fetched {len(issues)} issues")
 
         printer.print_eod(issues)
-
-    elif args.command == "check-issues-keys":
-        jiraRequester.check_issues_keys(PROJECT_KEY)
 
     elif args.command == "issues-to-csv":
         custom_fields = jiraRequester.load_custom_field_mappings()

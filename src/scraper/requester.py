@@ -443,15 +443,3 @@ class JiraRequester:
         except FileNotFoundError:
             print("Warning: Custom field mappings file not found")
             return {}
-
-    def check_issues_keys(self, project_key: str):
-        """Check the key column for each project in the raw_data folder which contains issues in json format"""
-        output_dir = Path("raw_data")
-        for file in output_dir.glob("*.json"):
-            with open(file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                print("\nKeys in file", file.name, ":")
-                # Sort keys in descending order (assuming keys are dates in YYYY-MM-DD format)
-                sorted_keys = sorted(data.keys(), reverse=True)
-                for key in sorted_keys:
-                    print(f"- {key}")
