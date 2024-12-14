@@ -40,6 +40,111 @@ def developer_performance(data):
 
     col1, col2 = st.columns(2)
     with col1:
+        completed_tickets = data[
+            data["Status"].isin(["In Prod", "Duplicate", "Cancelled"])
+        ].copy()
+        completed_tickets["Created"] = pd.to_datetime(
+            completed_tickets["Created"], utc=True
+        )
+
+        def get_completion_date(history):
+            try:
+                changes = eval(history)
+                if changes[0]["to"] in ["In Prod", "Duplicate", "Cancelled"]:
+                    return pd.to_datetime(changes[0]["date"], utc=True)
+            except:
+                return pd.NaT
+
+        completed_tickets["Completion Date"] = pd.to_datetime(
+            completed_tickets["Status Change History"].apply(get_completion_date),
+            utc=True,
+        )
+        completed_tickets = completed_tickets.dropna(subset=["Completion Date"])
+
+        completed_tickets["Resolution Time (Days)"] = (
+            completed_tickets["Completion Date"] - completed_tickets["Created"]
+        ).dt.total_seconds() / 86400 
+
+        fig_resolution = px.scatter(
+            completed_tickets,
+            x="Severity",
+            y="Resolution Time (Days)",
+            color="Assignee",
+            title="Resolution Time by Severity",
+            labels={
+                "Resolution Time (Days)": "Days to Resolve",
+                "Severity": "Severity Level",
+            },
+            hover_data=["Issue Key", "Issue Summary"],
+        )
+
+        # Update layout to show grid
+        fig_resolution.update_layout(
+            xaxis_title="Severity Level",
+            yaxis_title="Days to Resolve",
+            xaxis=dict(showgrid=True),
+            yaxis=dict(showgrid=True),
+        )
+
+        st.plotly_chart(fig_resolution)
+    with col2:
+        completed_tickets = data[
+            data["Status"].isin(["In Prod", "Duplicate", "Cancelled"])
+        ].copy()
+        completed_tickets["Created"] = pd.to_datetime(
+            completed_tickets["Created"], utc=True
+        )
+
+        def get_completion_date(history):
+            try:
+                changes = eval(history)
+                if changes[0]["to"] in ["In Prod", "Duplicate", "Cancelled"]:
+                    return pd.to_datetime(changes[0]["date"], utc=True)
+            except:
+                return pd.NaT
+
+        completed_tickets["Completion Date"] = pd.to_datetime(
+            completed_tickets["Status Change History"].apply(get_completion_date),
+            utc=True,
+        )
+
+        daily_tickets = (
+            completed_tickets.groupby(completed_tickets["Created"].dt.date)
+            .size()
+            .reset_index()
+        )
+        daily_tickets.columns = ["Date", "Number of Tickets"]
+
+        daily_tickets["Date"] = pd.to_datetime(daily_tickets["Date"])
+
+        time_granularity = st.selectbox("Select Time Granularity", ["Weekly", "Daily"])
+
+        if time_granularity == "Weekly":
+            x_value = daily_tickets["Date"].dt.strftime("%U")
+            x_label = "Week of Year"
+        else:
+            x_value = daily_tickets["Date"].dt.strftime("%d")
+            x_label = "Day of Month"
+
+        fig_resolution = px.density_heatmap(
+            daily_tickets,
+            x=x_value,
+            y=daily_tickets["Date"].dt.strftime("%A"),
+            z="Number of Tickets",
+            title=f"Ticket Creation Calendar Heatmap ({time_granularity} View)",
+            labels={"x": x_label, "y": "Day of Week", "z": "Number of Tickets"},
+        )
+
+        fig_resolution.update_layout(
+            xaxis_title="Day of Month",
+            yaxis_title="Day of Week",
+            coloraxis_colorbar_title="Number of Tickets",
+        )
+
+        st.plotly_chart(fig_resolution)
+
+    col1, col2 = st.columns(2)
+    with col1:
         if "Story Points" in data.columns and data["Story Points"].notna().any():
             story_points = (
                 data.groupby("Assignee")["Story Points"]

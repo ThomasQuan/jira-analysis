@@ -1,9 +1,26 @@
 # Jira Data Extraction & Analysis
-A minisize projects I created to extract data from Jira and basically analyze it to generate a yearly report.
+A small project I whip up during the last few days of 2024 before the year ends.
+I always wonder to myself how many issues did I resolve during the year?
+What was the most painful issues that I had dealt with?
+What was our year like in terms of performance?
+All these kind of questions jump into my head and I thought why not just create a tool that can help me answer those questions.
 
+![Jira Analyst Showcase](assets/jira_analyst_showcase.pdf)
 
+## Note
+This project is design to answer questions specifically to my company. You are free to use it and modify it to your own needs.
+There might be `custom_fields` that are not present or match to your company's Jira instance.
+You can modify them in to suit your needs.
+Example:
+- `customfield_10000` is the custom field for `Sprint` in my company.
+- `customfield_10001` is the custom field for `Development` in my company.
+- `customfield_10048` is the custom field for `Severity` in my company.
+- ...etc
 
-## Development setup
+## Setup
+
+### Enter your Jira credentials
+using the .env
 
 ### Create an virtual environment
 ```bash

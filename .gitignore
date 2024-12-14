@@ -10,3 +10,4 @@ config/
 raw_data/
 **/__pycache__/
 csv_data/
+.DS_Store
