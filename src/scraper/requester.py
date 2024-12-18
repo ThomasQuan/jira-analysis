@@ -183,6 +183,7 @@ class JiraRequester:
         timeframe: Dict[str, Any] = None,
         assignees: List[str] = None,
         skip_cache: bool = False,
+        excluded_status: List[str] = None,
     ) -> tuple[List[Dict[str, Any]], int]:
         """
         Fetch all issues for a project with detailed information, using cache when available
@@ -277,6 +278,10 @@ class JiraRequester:
             quoted_assignees = [f'"{assignee}"' for assignee in assignees]
             assignee_list = ", ".join(quoted_assignees)
             jql += f" AND assignee IN ({assignee_list})"
+
+        if excluded_status:
+            status_exclude_list = ", ".join(f'"{status}"' for status in excluded_status)
+            jql += f" AND status NOT IN ({status_exclude_list})"
 
         jql += f" ORDER BY {field} DESC"
 

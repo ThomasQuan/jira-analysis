@@ -137,7 +137,11 @@ def main():
         assignee = args.assignee if args.assignee else USERNAME
         with Halo(text="Fetching issues...", spinner="dots") as spinner:
             issues, total_available = jiraRequester.get_project_issues(
-                PROJECT_KEY, {"updated": timeframe}, [assignee], skip_cache=True
+                PROJECT_KEY,
+                {"updated": timeframe},
+                [assignee],
+                skip_cache=True,
+                excluded_status=["In Candidate Release"],
             )
             spinner.succeed(f"Successfully fetched {len(issues)} issues")
 
