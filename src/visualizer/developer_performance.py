@@ -133,6 +133,7 @@ def developer_performance(data):
             z="Number of Tickets",
             title=f"Ticket Creation Calendar Heatmap ({time_granularity} View)",
             labels={"x": x_label, "y": "Day of Week", "z": "Number of Tickets"},
+            color_continuous_scale="darkmint",
         )
 
         fig_resolution.update_layout(

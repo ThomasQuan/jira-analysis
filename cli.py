@@ -39,6 +39,7 @@ def main():
     )
     issues_parser.add_argument("--silent", action="store_true", help="Silent mode")
     issues_parser.add_argument("--skip-cache", action="store_true", help="Skip cache")
+    
     # Command: eod
     eod_parser = subparsers.add_parser(
         "eod",
@@ -51,7 +52,7 @@ def main():
     )
     eod_parser.add_argument(
         "timeframe",
-        nargs="*",  # Makes the argument optional
+        nargs="*",
         help="Filter by date. Examples:\n"
         "yesterday (default),\n"
         "2024-01-01 (specific date),\n"
@@ -140,8 +141,7 @@ def main():
                 PROJECT_KEY,
                 {"updated": timeframe},
                 [assignee],
-                skip_cache=True,
-                excluded_status=["In Candidate Release"],
+                skip_cache=True
             )
             spinner.succeed(f"Successfully fetched {len(issues)} issues")
 

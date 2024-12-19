@@ -7,7 +7,7 @@ from src.visualizer.ticket_linkage import ticket_linkage
 from src.visualizer.fix_versions_kpi import fix_versions_kpi
 from src.visualizer.comment_stats import comment_stats
 
-st.set_page_config(layout="wide")
+st.set_page_config(layout="wide", page_title="Company Jira Report")
 
 st.title("Company Year End Report")
 

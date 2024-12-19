@@ -266,7 +266,11 @@ class JiraRequester:
         for field, value in timeframe.items():
             start_date, end_date = self.get_date_range(value)
             if start_date:
-                if start_date == end_date:
+                if value == "today":
+                    jql += f" AND {field} >= '{start_date}' AND {field} <= endOfDay()"
+                elif value == "yesterday":
+                    jql += f" AND {field} >= '{start_date}' AND {field} <= endOfDay(-1d)"
+                elif start_date == end_date:
                     next_day = (
                         datetime.strptime(start_date, "%Y-%m-%d") + timedelta(days=1)
                     ).strftime("%Y-%m-%d")
@@ -329,8 +333,8 @@ class JiraRequester:
                 if len(batch_issues) < batch_size:
                     break
 
-            # Save new issues to cache if not skipping cache
-            if not skip_cache and new_issues_by_date:
+            # Save new issues to cache
+            if new_issues_by_date:
                 self._save_issues_to_cache(output_dir, new_issues_by_date)
 
         except requests.exceptions.RequestException as e:
